@@ -2,6 +2,7 @@
 
 # ADD THIS
 require_relative './globalruby'
+require_relative './runner'
 
 $x = 2
 
@@ -23,6 +24,9 @@ end
 #ADD THIS
 hub = Global::Ruby.instance
 
-# YOU CAN RUN YOUR METHODS ANYWHERE
+# YOU CAN RUN YOUR METHODS USING RUNNER'S CONTEXT
+puts run!(hub, :hello, @y+2)
+
+# YOU CAN RUN YOUR METHODS USING CURRENT CONTEXT
 puts hub.run(binding, :hello, @y+2)
 
