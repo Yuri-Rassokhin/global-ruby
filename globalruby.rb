@@ -12,13 +12,14 @@ class Ruby
   include Singleton
 
   def initialize
-    @user = `whoami`
+    @user = `whoami`.chomp
     @host = '127.0.0.1'
   end
 
-  def configure(user:, host: nil)
-    @user = user
-    @host = host ? host : @host
+  def configure(user: nil, host: nil, debug: false)
+    @user = user if user
+    @host = host if host
+    @debug = debug and debug == true ? debug : false
 #    @hosts = hosts ? (hosts.is_a?(Array) ? hosts : [ hosts ]) : nil
   end
 
@@ -150,8 +151,6 @@ end
 
 # Execute the serialized method on a remote host
 def execute_remotely(method_name, context, *args)
-  host = @host
-  user = @user
   serialized_data = serialize_method(method_name, context)
   # Build the Ruby script to execute remotely
   data = JSON.parse(serialized_data)
@@ -179,13 +178,18 @@ def execute_remotely(method_name, context, *args)
     puts result
   RUBY
 
-#  puts remote_script
+
+  dbg remote_script
   # Execute the script on the remote host and capture the output
   output = ""
-  Net::SSH.start('127.0.0.1', 'opc') do |ssh|
+  Net::SSH.start(@host, @user) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
   output.strip
+end
+
+def dbg(text)
+  puts text if @debug == true
 end
 
 end
