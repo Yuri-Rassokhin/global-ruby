@@ -1,8 +1,6 @@
 #!/usr/bin/ruby
 
-# ADD THIS
-require_relative './globalruby'
-require_relative './runner'
+puts "Starting on #{`hostname`}"
 
 $x = 2
 
@@ -18,21 +16,35 @@ def dep
 end
 
 def hello(arg)
-  require 'socket'
   dep
-  puts "Hello from #{Socket.gethostname}! It's #{@y*arg}"
+  puts "Hello from #{`hostname`.strip}! It's #{@y * arg}"
 end
 
-#ADD THIS
+hello(@y+2)
+
+require_relative './globalruby'
+require_relative './runner'
+
 hub = Global::Ruby.instance
+hub.configure(user: 'ubuntu', host: '130.162.50.40', debug: false)
 
-hub.configure(debug: true)
+# Run given method in the context where hub was declared, on a previously configured host
+# puts run!(hub, :hello, @y+2)
 
-#hub.configure(user: "user", host: "89.168.127.251")
+# Run given method in the current context on a previously configured host
+# puts hub.run(binding, :hello, @y+2)
 
-# YOU CAN RUN YOUR METHODS USING RUNNER'S CONTEXT
-#puts run!(hub, :hello, @y+2)
+# Asssign given method to run on the specified host, when called
 
-# YOU CAN RUN YOUR METHODS USING CURRENT CONTEXT
-puts hub.run(binding, :hello, @y+2)
+hub.land(binding, :hello, '130.162.50.40')
+
+#puts :hello.class
+
+puts hello(@y+2)
+
+#hub.land(binding, :hello, '130.162.50.40')
+
+puts hello(@y+2)
+
+puts hello(@y+2)
 

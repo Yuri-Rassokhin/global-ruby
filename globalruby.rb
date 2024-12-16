@@ -14,6 +14,9 @@ class Ruby
   def initialize
     @user = `whoami`.chomp
     @host = '127.0.0.1'
+    @original_methods = {}
+    # landscape is a definition of hosts where given method would uun on, when called
+    @landscape = nil
   end
 
   def configure(user: nil, host: nil, debug: false)
@@ -26,6 +29,36 @@ class Ruby
   def run(context, method, *args)
     execute_remotely(method, context, *args)
   end
+
+# define a host or hosts where the method will run
+def land(context, target = nil, method_name, host)
+  klass = target.nil? ? Object : target
+
+  # Retrieve the original method
+  original_method = klass.instance_method(method_name)
+
+#  puts @original_methods
+  # Store the original method and context for later use
+  @original_methods ||= {}
+  @original_methods[method_name] = { method: original_method, context: context }
+
+  # Proactively resolve dependencies and populate @original_methods
+  full_dependency_chain(method_name).each do |dependency|
+    unless @original_methods.key?(dependency)
+      method_obj = Object.instance_method(dependency)
+      @original_methods[dependency] = { method: method_obj, context: context }
+    end
+  end
+
+  # Reference the current instance
+  hub_instance = self
+
+  # Redefine the method locally
+  klass.define_method(method_name) do |*args, &block|
+    # Use the hub_instance to execute the method remotely
+    hub_instance.run(context, method_name, *args, &block)
+  end
+end
 
 private
 
@@ -42,12 +75,11 @@ def method_dependencies(method)
     # Look for method calls (:vcall or :call)
     if node.is_a?(Array) && node[0] == :vcall
       # Extract the method name
-      dependencies << node[1][1] if node[1].is_a?(Array) && node[1][0] == :@ident
+      dependencies << node[1][1].to_sym if node[1].is_a?(Array) && node[1][0] == :@ident
     elsif node.is_a?(Array) && node[0] == :call
-      dependencies << node[2][1] if node[2].is_a?(Array) && node[2][0] == :@ident
+      dependencies << node[2][1].to_sym if node[2].is_a?(Array) && node[2][0] == :@ident
     end
   end
-
   dependencies.uniq
 end
 
@@ -64,24 +96,50 @@ def full_dependency_chain(method_name, seen_methods = Set.new)
 
   seen_methods.add(method_name)
 
-  # Get the method object
-  method_obj = Object.instance_method(method_name)
+  # Check if the method is already in @original_methods
+  unless @original_methods.key?(method_name)
+    # Attempt to retrieve the method dynamically
+    begin
+      method_obj = Object.instance_method(method_name)
+      context = binding # Default to the current binding
+      @original_methods[method_name] = { method: method_obj, context: context }
+    rescue NameError
+      # Skip if the method does not exist
+      return []
+    end
+  end
+
+  # Retrieve the method object and context from @original_methods
+  method_info = @original_methods[method_name]
+  method_obj = method_info[:method]
+  context = method_info[:context]
+
+  # Analyze direct dependencies of the method
   dependencies = method_dependencies(method_obj)
 
   # Recursively find dependencies of dependencies
   full_chain = dependencies.flat_map do |dependency|
-    [dependency] + full_dependency_chain(dependency, seen_methods)
+    full_dependency_chain(dependency, seen_methods)
   end
 
-  full_chain.uniq
+  [method_name] + full_chain.uniq
 end
 
 def output_dependency_chain(method_name)
   result = ""
   chain = full_dependency_chain(method_name)
+
   chain.each do |dependency|
-    method_obj = Object.instance_method(dependency)
-    result << "#{method_obj.source}\n"
+    begin
+      # Retrieve the method object from @original_methods
+      method_info = @original_methods[dependency]
+      method_obj = method_info[:method]
+
+      # Append the source of the method
+      result << method_obj.source + "\n"
+    rescue => e
+      result << "# Error processing dependency #{dependency}: #{e.message}\n"
+    end
   end
   result
 end
@@ -124,13 +182,19 @@ def get_context_variables(context)
 end
 
 # Serialize a Ruby method and its dependencies
-def serialize_method(method_name, context)
-  # Use MethodSource to get the method body
-  method_body = context.method(method_name).source
-#  dependencies = context.local_variables.map do |var|
-#    [var, context.local_variable_get(var)]
-#  end.to_h
+def serialize_method(method_name, caller_context)
+  # Retrieve the original method object and context
+  method_info = @original_methods[method_name]
+  method_obj = method_info[:method]
+  context = method_info[:context] || caller_context
+
+  # Extract the method source code
+  method_body = method_obj.source
+
+  # Collect instance and global variables from the caller context
   variables = get_context_variables(context)
+
+  # Return serialized method and dependencies
   {
     method_name: method_name,
     method_body: method_body,
@@ -151,40 +215,43 @@ end
 
 # Execute the serialized method on a remote host
 def execute_remotely(method_name, context, *args)
+  # Serialize the method and its dependencies
   serialized_data = serialize_method(method_name, context)
-  # Build the Ruby script to execute remotely
   data = JSON.parse(serialized_data)
+
+  # Collect serialized dependencies (instance/global variables)
   deps = ""
-#  call = ""
-  updated_method = data["method_body"]
-   data["dependencies"].each do |key, value|
-      next unless key.start_with?("@", "@@", "$")
-      deps << "#{key} = #{value.inspect} \n"
-#       updated_method = add_parameter_to_method(updated_method, key)
-#       if call == ""
-#        call = "#{value.inspect}"
-#       else
-#        call << ", #{value.inspect}"
-#      end
+  data["dependencies"].each do |key, value|
+    deps << "#{key} = #{value.inspect}\n" if key.start_with?("@", "@@", "$")
   end
 
+  # Collect all method definitions in the dependency chain
+  method_definitions = output_dependency_chain(method_name)
+
+  # Serialized arguments for the method call
   serialized_args = args.map(&:inspect).join(", ")
 
+  # Generate the remote script
   remote_script = <<~RUBY
-    #{output_dependency_chain(method_name)}
+    # Serialized dependencies
     #{deps}
-    #{updated_method}
-    result = #{data["method_name"]}(#{serialized_args})
+
+    # Serialized method definitions
+    #{method_definitions}
+
+    # Execute the method with arguments
+    result = #{method_name}(#{serialized_args})
     puts result
   RUBY
 
+  dbg("Remote Script:\n#{remote_script}")
 
-  dbg remote_script
-  # Execute the script on the remote host and capture the output
+  # Execute the script on the remote host
   output = ""
   Net::SSH.start(@host, @user) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
+
   output.strip
 end
 
