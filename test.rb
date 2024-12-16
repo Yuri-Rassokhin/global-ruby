@@ -20,7 +20,9 @@ def hello(arg)
   puts "Hello from #{`hostname`.strip}! It's #{@y * arg}"
 end
 
+puts "@y = #{@y}"
 hello(@y+2)
+puts "@y = #{@y}"
 
 require_relative './globalruby'
 require_relative './runner'
@@ -38,13 +40,13 @@ hub.configure(user: 'ubuntu', host: '130.162.50.40', debug: false)
 
 hub.land(binding, :hello, '130.162.50.40')
 
-#puts :hello.class
-
+puts "@y = #{@y}"
 puts hello(@y+2)
+puts "@y = #{@y}"
 
 #hub.land(binding, :hello, '130.162.50.40')
 
-puts hello(@y+2)
+#puts hello(@y+2)
 
-puts hello(@y+2)
+#puts hello(@y+2)
 

@@ -55,9 +55,22 @@ def land(context, target = nil, method_name, host)
 
   # Redefine the method locally
   klass.define_method(method_name) do |*args, &block|
-    # Use the hub_instance to execute the method remotely
-    hub_instance.run(context, method_name, *args, &block)
+    # Execute the method remotely and capture the result
+    remote_result = hub_instance.run(context, method_name, *args, &block)
+
+    # Log or display the captured output if needed
+    captured_output = remote_result["output"]
+#    puts "Captured remote output:\n#{captured_output}" if @debug == true
+
+    # Update dependent variables in the local context
+    updated_variables = remote_result["variables"]
+    updated_variables.each do |key, value|
+      if key.start_with?("@")
+        context.eval("#{key} = #{value.inspect}")
+      end
   end
+    remote_result["output"]
+end
 end
 
 private
@@ -233,6 +246,17 @@ def execute_remotely(method_name, context, *args)
 
   # Generate the remote script
   remote_script = <<~RUBY
+    require 'json'
+    require 'stringio'
+
+    # Capture both STDOUT and STDERR into a single stream
+    output_stream = StringIO.new
+    original_stdout = $stdout
+    original_stderr = $stderr
+    $stdout = output_stream
+    $stderr = output_stream
+
+    begin
     # Serialized dependencies
     #{deps}
 
@@ -240,8 +264,22 @@ def execute_remotely(method_name, context, *args)
     #{method_definitions}
 
     # Execute the method with arguments
-    result = #{method_name}(#{serialized_args})
-    puts result
+    #{method_name}(#{serialized_args})
+    # Capture updated state of dependent variables
+    updated_variables = {
+      #{data["dependencies"].keys.map { |key| "\"#{key}\": #{key}" }.join(", ")}
+    }
+    ensure
+    # Restore STDOUT and STDERR
+    $stdout = original_stdout
+    $stderr = original_stderr
+    end
+    # Combine the captured output with the result and variables
+    output = {
+      variables: updated_variables,
+      output: output_stream.string.strip # Captured "natural" output
+    }
+    puts output.to_json
   RUBY
 
   dbg("Remote Script:\n#{remote_script}")
@@ -251,8 +289,8 @@ def execute_remotely(method_name, context, *args)
   Net::SSH.start(@host, @user) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
-
-  output.strip
+#  puts output.strip
+  JSON.parse(output.strip)
 end
 
 def dbg(text)
