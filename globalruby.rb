@@ -11,31 +11,31 @@ require 'singleton'
 class Ruby
   include Singleton
 
+  attr :debug
+
   def initialize
-    @user = `whoami`.chomp
-    @host = '127.0.0.1'
+    @@user = `whoami`.chomp
+    @@host = '127.0.0.1'
     @original_methods = {}
     @@landed_methods = Set.new
     # landscape is a definition of hosts where given method would uun on, when called
-    @landscape = nil
+    @@landscape = nil
   end
 
   def configure(user: nil, host: nil, debug: false)
-    @user = user if user
-    @host = host if host
-    @debug = debug and debug == true ? debug : false
-#    @hosts = hosts ? (hosts.is_a?(Array) ? hosts : [ hosts ]) : nil
+    @@user = user if user
+    @@host = host if host
+    @@debug = debug and debug == true ? debug : false
   end
 
   def run(context, method, *args)
     execute_remotely(method, context, *args)
   end
 
-# define a host or hosts where the method will run
 def land(context, target = nil, method_name, host)
 
   if @@landed_methods.include?(method_name)
-    @host = host
+    @@host = host
     return
   end
 
@@ -45,14 +45,14 @@ def land(context, target = nil, method_name, host)
   original_method = klass.instance_method(method_name)
 
   # Store the original method and context for later use
-  @original_methods ||= {}
-  @original_methods[method_name] = { method: original_method, context: context }
+  @@original_methods ||= {}
+  @@original_methods[method_name] = { method: original_method, context: context }
 
-  # Proactively resolve dependencies and populate @original_methods
+  # Proactively resolve dependencies and populate original methods
   full_dependency_chain(method_name).each do |dependency|
-    unless @original_methods.key?(dependency)
+    unless @@original_methods.key?(dependency)
       method_obj = Object.instance_method(dependency)
-      @original_methods[dependency] = { method: method_obj, context: context }
+      @@original_methods[dependency] = { method: method_obj, context: context }
     end
   end
 
@@ -66,7 +66,6 @@ def land(context, target = nil, method_name, host)
 
     # Log or display the captured output if needed
     captured_output = remote_result["output"]
-#    puts "Captured remote output:\n#{captured_output}" if @debug == true
 
     # Update dependent variables in the local context
     updated_variables = remote_result["variables"]
@@ -117,20 +116,20 @@ def full_dependency_chain(method_name, seen_methods = Set.new)
   seen_methods.add(method_name)
 
   # Check if the method is already in @original_methods
-  unless @original_methods.key?(method_name)
+  unless @@original_methods.key?(method_name)
     # Attempt to retrieve the method dynamically
     begin
       method_obj = Object.instance_method(method_name)
       context = binding # Default to the current binding
-      @original_methods[method_name] = { method: method_obj, context: context }
+      @@original_methods[method_name] = { method: method_obj, context: context }
     rescue NameError
       # Skip if the method does not exist
       return []
     end
   end
 
-  # Retrieve the method object and context from @original_methods
-  method_info = @original_methods[method_name]
+  # Retrieve the method object and context from original methods
+  method_info = @@original_methods[method_name]
   method_obj = method_info[:method]
   context = method_info[:context]
 
@@ -151,8 +150,8 @@ def output_dependency_chain(method_name)
 
   chain.each do |dependency|
     begin
-      # Retrieve the method object from @original_methods
-      method_info = @original_methods[dependency]
+      # Retrieve the method object from original methods
+      method_info = @@original_methods[dependency]
       method_obj = method_info[:method]
 
       # Append the source of the method
@@ -204,7 +203,7 @@ end
 # Serialize a Ruby method and its dependencies
 def serialize_method(method_name, caller_context)
   # Retrieve the original method object and context
-  method_info = @original_methods[method_name]
+  method_info = @@original_methods[method_name]
   method_obj = method_info[:method]
   context = method_info[:context] || caller_context
 
@@ -293,7 +292,7 @@ def execute_remotely(method_name, context, *args)
 
   # Execute the script on the remote host
   output = ""
-  Net::SSH.start(@host, @user) do |ssh|
+  Net::SSH.start(@@host, @@user) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
 #  puts output.strip
@@ -301,7 +300,7 @@ def execute_remotely(method_name, context, *args)
 end
 
 def dbg(text)
-  puts text if @debug == true
+  puts text if @@debug == true
 end
 
 end
