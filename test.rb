@@ -44,9 +44,9 @@ puts "@y = #{@y}"
 puts hello(@y+2)
 puts "@y = #{@y}"
 
-#hub.land(binding, :hello, '130.162.50.40')
+puts hello(@y+2)
 
-#puts hello(@y+2)
+hub.land(binding, :hello, '127.0.0.1')
 
-#puts hello(@y+2)
+puts hello(@y+2)
 

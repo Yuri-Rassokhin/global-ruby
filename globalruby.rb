@@ -15,6 +15,7 @@ class Ruby
     @user = `whoami`.chomp
     @host = '127.0.0.1'
     @original_methods = {}
+    @@landed_methods = Set.new
     # landscape is a definition of hosts where given method would uun on, when called
     @landscape = nil
   end
@@ -32,12 +33,17 @@ class Ruby
 
 # define a host or hosts where the method will run
 def land(context, target = nil, method_name, host)
+
+  if @@landed_methods.include?(method_name)
+    @host = host
+    return
+  end
+
   klass = target.nil? ? Object : target
 
   # Retrieve the original method
   original_method = klass.instance_method(method_name)
 
-#  puts @original_methods
   # Store the original method and context for later use
   @original_methods ||= {}
   @original_methods[method_name] = { method: original_method, context: context }
@@ -69,6 +75,7 @@ def land(context, target = nil, method_name, host)
         context.eval("#{key} = #{value.inspect}")
       end
   end
+    @@landed_methods.add(method_name)
     remote_result["output"]
 end
 end
