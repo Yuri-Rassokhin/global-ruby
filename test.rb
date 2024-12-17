@@ -28,7 +28,8 @@ require_relative './globalruby'
 require_relative './runner'
 
 hub = Global::Ruby.instance
-hub.configure(user: 'ubuntu', host: '130.162.50.40', debug: false)
+hub.configure(user: 'ubuntu', host: '130.162.50.40')
+hub.debug = false
 
 # Run given method in the context where hub was declared, on a previously configured host
 # puts run!(hub, :hello, @y+2)

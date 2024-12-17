@@ -11,9 +11,26 @@ require 'singleton'
 class Ruby
   include Singleton
 
-  attr :debug
+  @@debug = false
+
+  def self.debug
+    @@debug == true
+  end
+
+  def self.debug=(value)
+    @@debug = value
+  end
+
+  def debug
+    @@debug
+  end
+
+  def debug=(value)
+    @@debug = value
+  end
 
   def initialize
+
     @@user = `whoami`.chomp
     @@host = '127.0.0.1'
     @original_methods = {}
@@ -22,10 +39,9 @@ class Ruby
     @@landscape = nil
   end
 
-  def configure(user: nil, host: nil, debug: false)
+  def configure(user: nil, host: nil)
     @@user = user if user
     @@host = host if host
-    @@debug = debug and debug == true ? debug : false
   end
 
   def run(context, method, *args)
@@ -300,7 +316,7 @@ def execute_remotely(method_name, context, *args)
 end
 
 def dbg(text)
-  puts text if @@debug == true
+  puts text if @@debug
 end
 
 end
