@@ -18,6 +18,7 @@ end
 def hello(arg)
   dep
   puts "Hello from #{`hostname`.strip}! It's #{@y * arg}"
+  true
 end
 
 puts "@y = #{@y}"
@@ -47,7 +48,7 @@ puts "@y = #{@y}"
 
 puts hello(@y+2)
 
-hub.land(binding, :hello, '127.0.0.1')
+#hub.land(binding, :hello, '127.0.0.1')
 
-puts hello(@y+2)
+#puts hello(@y+2)
 

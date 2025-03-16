@@ -127,7 +127,9 @@ def land(context, target = nil, method_name, host)
       end
   end
     @@landed_methods.add(method_name)
-    remote_result["output"]
+     puts remote_result["output"] if remote_result["output"]
+     remote_result["result"]
+#    remote_result["output"]
 end
 end
 
@@ -322,7 +324,7 @@ def execute_remotely(method_name, context, *args)
     #{method_definitions}
 
     # Execute the method with arguments
-    #{method_name}(#{serialized_args})
+    result = #{method_name}(#{serialized_args})
     # Capture updated state of dependent variables
     updated_variables = {
       #{data["dependencies"].keys.map { |key| "\"#{key}\": #{key}" }.join(", ")}
@@ -335,7 +337,8 @@ def execute_remotely(method_name, context, *args)
     # Combine the captured output with the result and variables
     output = {
       variables: updated_variables,
-      output: output_stream.string.strip # Captured "natural" output
+      output: output_stream.string.strip, # Captured "natural" output
+      result: result
     }
     puts output.to_json
   RUBY
@@ -347,7 +350,6 @@ def execute_remotely(method_name, context, *args)
   Net::SSH.start(@@host, @@user) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
-#  puts output.strip
   JSON.parse(output.strip)
 end
 
