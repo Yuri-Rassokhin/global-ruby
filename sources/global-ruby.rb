@@ -8,42 +8,6 @@ require 'ripper'
 require 'set'
 require 'singleton'
 
-class Landscape
-  include Singleton
-
-  # by default, the world landscape equals to localhost
-  def initialize
-    # The one and only set of all nodes in the world
-    @@world = Set.new('127.0.0.1')
-    # Those world nodes that are assigned names, for convenience
-    @@nodes = {
-      'localhost': '127.0.0.1'
-    }
-    # Methods that are landed onto a node, 1:N relation
-    # Every method is associated with a group of nodes where it is landed on
-    # When the method is invoked, it runs on all such nodes
-    # Global Ruby assesses if it is safe to run the method on its nodes in parallel
-    # If it safe, it marks the method's group as "parallelizable"
-    # Otherwise, TODO
-    # NOTE: it is unique opportunity of Global Ruby's approach to detect potential race conditions
-    # ... and therefore decide where instances of a method can run in parallel or not
-    @@methods = {}
-  end
-
-  # add a new node to the world landscape
-  def add(url, name = nil)
-    @@world << url
-    @@nodes[url] = name if name
-  end
-end
-
-class Communicator
-  def initialize
-  end
-  # Abstract class representing communication between landed chunks
-  # This class must be overriden by specific communicators: SSH, HTTP, Object Storage, and so forth
-end
-
 class Ruby
   include Singleton
 
@@ -134,6 +98,57 @@ end
 end
 
 private
+
+def scan(subnet = "10.0.0", port = 22, arg_threads = 50, username = "ubuntu")
+  ping_timeout = 1
+  ssh_timeout = 3
+  ssh_key = "~/.ssh/id_rsa"  # Change to your SSH private key
+
+  # Array to store discovered SSH hosts
+  ssh_hosts = []
+  mutex = Mutex.new
+
+  # Define worker queue
+  queue = Queue.new
+  (1..254).each { |i| queue.push("#{subnet}.#{i}") }
+
+  threads = arg_threads.times.map do
+    Thread.new do
+      while !queue.empty?
+        ip = queue.pop(true) rescue nil
+        next unless ip
+
+        # Ping check
+        if Net::Ping::External.new(ip, nil, ping_timeout).ping?
+          # SSH Check using socket
+          begin
+            Timeout.timeout(ssh_timeout) do
+              socket = TCPSocket.new(ip, port)
+              socket.close
+
+              # Attempt SSH login
+              begin
+                Net::SSH.start(ip, username, keys: [File.expand_path(ssh_key)], non_interactive: true) do |_ssh|
+                  mutex.synchronize { ssh_hosts << "#{username}@#{ip}" }
+                end
+              rescue
+                next # Ignore failed logins silently
+              end
+            end
+          rescue Timeout::Error, Errno::ECONNREFUSED
+            next # Ignore non-responsive SSH hosts
+          end
+        end
+      end
+    end
+  end
+
+  # Wait for all threads to finish
+  threads.each(&:join)
+
+  # Return the discovered SSH hosts
+  ssh_hosts
+end
 
 def method_dependencies(method)
   # Get the source code of the method
@@ -350,6 +365,7 @@ def execute_remotely(method_name, context, *args)
   Net::SSH.start(@@host, @@user) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
+  dbg output
   JSON.parse(output.strip)
 end
 
