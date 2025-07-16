@@ -214,7 +214,7 @@ module Global
   end
 
   # ✅ Делегация
-  def self.run(context, method, host, *args)
+  def self.run!(context, method, host, *args)
     Hub.instance.run(context, method, host, *args)
   end
 
@@ -222,7 +222,7 @@ module Global
     Hub.instance.land(context, target, method_name, host)
   end
 
-  def self.run!(context, method_name, host, *args, target: nil)
+  def self.run(context, host, method_name, *args, target: nil)
     Hub.instance.run!(context, method_name, host, *args, target: target)
   end
 
