@@ -35,8 +35,6 @@ class Ruby
     @@host = '127.0.0.1'
     @original_methods = {}
     @@landed_methods = Set.new
-    # landscape is a definition of hosts where given method would uun on, when called
-    @@landscape = nil
   end
 
   def configure(user: nil, host: nil)
