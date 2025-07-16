@@ -13,25 +13,17 @@ class Ruby
 
   def initialize
 
-    @@user = `whoami`.chomp
-    @@host = '127.0.0.1'
     @original_methods = {}
     @@landed_methods = Set.new
   end
 
-  def configure(user: nil, host: nil)
-    @@user = user if user
-    @@host = host if host
-  end
-
-  def run(context, method, *args)
-    execute_remotely(method, context, *args)
+  def run(context, method, host, *args)
+    execute_remotely(method, context, host, *args)
   end
 
 def land(context, target = nil, method_name, host)
 
   if @@landed_methods.include?(method_name)
-    @@host = host
     return
   end
 
@@ -58,7 +50,7 @@ def land(context, target = nil, method_name, host)
   # Redefine the method locally
   klass.define_method(method_name) do |*args, &block|
     # Execute the method remotely and capture the result
-    remote_result = hub_instance.run(context, method_name, *args, &block)
+    remote_result = hub_instance.run(context, method_name, host, *args, &block)
 
     # Log or display the captured output if needed
     captured_output = remote_result["output"]
@@ -231,7 +223,7 @@ def add_parameter_to_method(method_body, new_param)
 end
 
 # Execute the serialized method on a remote host
-def execute_remotely(method_name, context, *args)
+def execute_remotely(method_name, context, host, *args)
   # Serialize the method and its dependencies
   serialized_data = serialize_method(method_name, context)
   data = JSON.parse(serialized_data)
@@ -291,7 +283,7 @@ def execute_remotely(method_name, context, *args)
 
   # Execute the script on the remote host
   output = ""
-  Net::SSH.start(@@host, @@user) do |ssh|
+  Net::SSH.start(host) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
 #  puts output
