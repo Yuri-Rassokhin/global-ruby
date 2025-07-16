@@ -1,4 +1,3 @@
-
 require 'json'
 require 'net/ssh'
 require 'method_source'
@@ -8,290 +7,208 @@ require 'set'
 require 'singleton'
 
 module Global
-class Hub
-  include Singleton
+  class Hub
+    include Singleton
 
-  def initialize
-
-    @original_methods = {}
-    @@landed_methods = Set.new
-  end
-
-  def run(context, method, host, *args)
-    execute_remotely(method, context, host, *args)
-  end
-
-def land(context, target = nil, method_name, host)
-
-  if @@landed_methods.include?(method_name)
-    return
-  end
-
-  klass = target.nil? ? Object : target
-
-  # Retrieve the original method
-  original_method = klass.instance_method(method_name)
-
-  # Store the original method and context for later use
-  @@original_methods ||= {}
-  @@original_methods[method_name] = { method: original_method, context: context }
-
-  # Proactively resolve dependencies and populate original methods
-  full_dependency_chain(method_name).each do |dependency|
-    unless @@original_methods.key?(dependency)
-      method_obj = Object.instance_method(dependency)
-      @@original_methods[dependency] = { method: method_obj, context: context }
+    def initialize
+      @method_hosts = {}        # method_name => текущий хост
+      @original_methods = {}    # method_name => { method: UnboundMethod, context: Binding }
+      @@landed_methods = Set.new
     end
-  end
 
-  # Reference the current instance
-  hub_instance = self
+    def run(context, method, host, *args)
+      execute_remotely(method, context, host, *args)
+    end
 
-  # Redefine the method locally
-  klass.define_method(method_name) do |*args, &block|
-    # Execute the method remotely and capture the result
-    remote_result = hub_instance.run(context, method_name, host, *args, &block)
+    def land(context, target = nil, method_name, host)
+      @method_hosts[method_name] = host
 
-    # Log or display the captured output if needed
-    captured_output = remote_result["output"]
+      klass = target.nil? ? Object : target
 
-    # Update dependent variables in the local context
-    updated_variables = remote_result["variables"]
-    updated_variables.each do |key, value|
-      if key.start_with?("@")
-        context.eval("#{key} = #{value.inspect}")
+      # ✅ Сохраняем оригинал ТОЛЬКО один раз
+      unless @original_methods.key?(method_name)
+        original_method = klass.instance_method(method_name)
+        @original_methods[method_name] = { method: original_method, context: context }
       end
-  end
-    @@landed_methods.add(method_name)
-     puts remote_result["output"] if remote_result["output"]
-     remote_result["result"]
-#    remote_result["output"]
-end
-end
 
-private
+      # ✅ Также сохраняем зависимости один раз
+      full_dependency_chain(method_name).each do |dependency|
+        unless @original_methods.key?(dependency)
+          method_obj = Object.instance_method(dependency)
+          @original_methods[dependency] = { method: method_obj, context: context }
+        end
+      end
 
-def method_dependencies(method)
-  # Get the source code of the method
-  source = method.source
+      hub_instance = self
 
-  # Parse the source code to identify method calls
-  dependencies = []
-  sexp = Ripper.sexp(source)
+      # ✅ Каждый land переопределяет метод с актуальным хостом
+      klass.define_method(method_name) do |*args, &block|
+        current_host = hub_instance.instance_variable_get(:@method_hosts)[method_name]
+        remote_result = hub_instance.run(context, method_name, current_host, *args, &block)
 
-  # Traverse the parsed S-expression
-  traverse_sexp(sexp) do |node|
-    # Look for method calls (:vcall or :call)
-    if node.is_a?(Array) && node[0] == :vcall
-      # Extract the method name
-      dependencies << node[1][1].to_sym if node[1].is_a?(Array) && node[1][0] == :@ident
-    elsif node.is_a?(Array) && node[0] == :call
-      dependencies << node[2][1].to_sym if node[2].is_a?(Array) && node[2][0] == :@ident
+        updated_variables = remote_result["variables"]
+        updated_variables.each do |key, value|
+          context.eval("#{key} = #{value.inspect}") if key.start_with?("@")
+        end
+
+        puts remote_result["output"] if remote_result["output"]
+        remote_result["result"]
+      end
+    end
+
+    private
+
+    def method_dependencies(method)
+      source = method.source
+      dependencies = []
+      sexp = Ripper.sexp(source)
+      traverse_sexp(sexp) do |node|
+        if node.is_a?(Array) && node[0] == :vcall
+          dependencies << node[1][1].to_sym if node[1].is_a?(Array) && node[1][0] == :@ident
+        elsif node.is_a?(Array) && node[0] == :call
+          dependencies << node[2][1].to_sym if node[2].is_a?(Array) && node[2][0] == :@ident
+        end
+      end
+      dependencies.uniq
+    end
+
+    def traverse_sexp(sexp, &block)
+      return unless sexp.is_a?(Array)
+      yield(sexp)
+      sexp.each { |node| traverse_sexp(node, &block) }
+    end
+
+    def full_dependency_chain(method_name, seen_methods = Set.new)
+      return [] if seen_methods.include?(method_name)
+      seen_methods.add(method_name)
+
+      unless @original_methods.key?(method_name)
+        begin
+          method_obj = Object.instance_method(method_name)
+          context = binding
+          @original_methods[method_name] = { method: method_obj, context: context }
+        rescue NameError
+          return []
+        end
+      end
+
+      method_obj = @original_methods[method_name][:method]
+      dependencies = method_dependencies(method_obj)
+
+      full_chain = dependencies.flat_map do |dependency|
+        full_dependency_chain(dependency, seen_methods)
+      end
+
+      [method_name] + full_chain.uniq
+    end
+
+    def output_dependency_chain(method_name)
+      result = ""
+      chain = full_dependency_chain(method_name)
+      chain.each do |dependency|
+        begin
+          method_obj = @original_methods[dependency][:method]
+          result << method_obj.source + "\n"
+        rescue => e
+          result << "# Error processing dependency #{dependency}: #{e.message}\n"
+        end
+      end
+      result
+    end
+
+    def get_context_variables(context)
+      instance_vars = context.eval('instance_variables').map do |var|
+        [var, context.eval(var.to_s)]
+      end
+
+      class_vars = if context.eval('self').is_a?(Class) || context.eval('self').is_a?(Module)
+                     context.eval('self.class_variables').map do |var|
+                       [var, context.eval("self.class_variable_get(:#{var})")]
+                     end
+                   else
+                     []
+                   end
+
+      constants = if context.eval('self').is_a?(Class) || context.eval('self').is_a?(Module)
+                    context.eval('self.constants').map do |const|
+                      [const, context.eval("self.const_get(:#{const})")]
+                    end
+                  else
+                    []
+                  end
+
+      (instance_vars + class_vars + constants).to_h
+    end
+
+    def serialize_method(method_name, caller_context)
+      method_obj = @original_methods[method_name][:method]
+      context = @original_methods[method_name][:context] || caller_context
+      {
+        method_name: method_name,
+        method_body: method_obj.source,
+        dependencies: get_context_variables(context)
+      }.to_json
+    end
+
+    def add_parameter_to_method(method_body, new_param)
+      method_body.sub(/def\s+(\w+)(\(([^)]*)\))?/) do |match|
+        method_name = Regexp.last_match(1)
+        params = Regexp.last_match(3) || ""
+        updated_params = params.empty? ? new_param : "#{params}, #{new_param}"
+        "def #{method_name}(#{updated_params})"
+      end
+    end
+
+    def execute_remotely(method_name, context, host, *args)
+      serialized_data = serialize_method(method_name, context)
+      data = JSON.parse(serialized_data)
+
+      deps = ""
+      data["dependencies"].each do |key, value|
+        deps << "#{key} = #{value.inspect}\n" if key.start_with?("@", "@@", "$")
+      end
+
+      method_definitions = output_dependency_chain(method_name)
+      serialized_args = args.map(&:inspect).join(", ")
+
+      remote_script = <<~RUBY
+        require 'json'
+        require 'stringio'
+        output_stream = StringIO.new
+        original_stdout = $stdout
+        original_stderr = $stderr
+        $stdout = output_stream
+        $stderr = output_stream
+
+        begin
+          #{deps}
+          #{method_definitions}
+          result = #{method_name}(#{serialized_args})
+          updated_variables = {
+            #{data["dependencies"].keys.map { |key| "\"#{key}\": #{key}" }.join(", ")}
+          }
+        ensure
+          $stdout = original_stdout
+          $stderr = original_stderr
+        end
+
+        output = {
+          variables: updated_variables,
+          output: output_stream.string.strip,
+          result: result
+        }
+        puts output.to_json
+      RUBY
+
+      output = ""
+      Net::SSH.start(host) do |ssh|
+        output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
+      end
+      JSON.parse(output.strip)
     end
   end
-  dependencies.uniq
-end
 
-def traverse_sexp(sexp, &block)
-  return unless sexp.is_a?(Array)
-
-  yield(sexp)
-  sexp.each { |node| traverse_sexp(node, &block) }
-end
-
-def full_dependency_chain(method_name, seen_methods = Set.new)
-  # Prevent infinite loops for cyclic dependencies
-  return [] if seen_methods.include?(method_name)
-
-  seen_methods.add(method_name)
-
-  # Check if the method is already in @original_methods
-  unless @@original_methods.key?(method_name)
-    # Attempt to retrieve the method dynamically
-    begin
-      method_obj = Object.instance_method(method_name)
-      context = binding # Default to the current binding
-      @@original_methods[method_name] = { method: method_obj, context: context }
-    rescue NameError
-      # Skip if the method does not exist
-      return []
-    end
-  end
-
-  # Retrieve the method object and context from original methods
-  method_info = @@original_methods[method_name]
-  method_obj = method_info[:method]
-  context = method_info[:context]
-
-  # Analyze direct dependencies of the method
-  dependencies = method_dependencies(method_obj)
-
-  # Recursively find dependencies of dependencies
-  full_chain = dependencies.flat_map do |dependency|
-    full_dependency_chain(dependency, seen_methods)
-  end
-
-  [method_name] + full_chain.uniq
-end
-
-def output_dependency_chain(method_name)
-  result = ""
-  chain = full_dependency_chain(method_name)
-
-  chain.each do |dependency|
-    begin
-      # Retrieve the method object from original methods
-      method_info = @@original_methods[dependency]
-      method_obj = method_info[:method]
-
-      # Append the source of the method
-      result << method_obj.source + "\n"
-    rescue => e
-      result << "# Error processing dependency #{dependency}: #{e.message}\n"
-    end
-  end
-  result
-end
-
-def get_context_variables(context)
-  dependencies = {}
-
-  # add global variables
- global_vars = global_variables.map do |var|
-   [var, eval(var.to_s, context)]
-  end
-
-  # add instance variables
-  instance_vars = context.eval('instance_variables').map do |var|
-    [var, context.eval(var.to_s)]
-  end
-
-  # add class variables (if context self is a class or module)
-  class_vars = if context.eval('self').is_a?(Class) || context.eval('self').is_a?(Module)
-                context.eval('self.class_variables').map do |var|
-                  [var, context.eval("self.class_variable_get(:#{var})")]
-                end
-              else
-                []
-              end
-
-  # Add constants (if context self is a class or module)
-  constants = if context.eval('self').is_a?(Class) || context.eval('self').is_a?(Module)
-              context.eval('self.constants').map do |const|
-                [const, context.eval("self.const_get(:#{const})")]
-              end
-            else
-              []
-            end
-
-  # combine all variables into dependencies
-  # NOTE and TODO: global_vars are excluded for the sake of performance and stability 
-  dependencies =  instance_vars + class_vars + constants
-  dependencies = dependencies.to_h
-end
-
-# Serialize a Ruby method and its dependencies
-def serialize_method(method_name, caller_context)
-  # Retrieve the original method object and context
-  method_info = @@original_methods[method_name]
-  method_obj = method_info[:method]
-  context = method_info[:context] || caller_context
-
-  # Extract the method source code
-  method_body = method_obj.source
-
-  # Collect instance and global variables from the caller context
-  variables = get_context_variables(context)
-
-  # Return serialized method and dependencies
-  {
-    method_name: method_name,
-    method_body: method_body,
-    dependencies: variables
-  }.to_json
-end
-
-def add_parameter_to_method(method_body, new_param)
-  # Match the method definition line, accounting for missing parentheses
-  method_body.sub(/def\s+(\w+)(\(([^)]*)\))?/) do |match|
-    method_name = Regexp.last_match(1)
-    params = Regexp.last_match(3) || "" # Default to an empty string if no params
-    # Add the new parameter
-    updated_params = params.empty? ? new_param : "#{params}, #{new_param}"
-    "def #{method_name}(#{updated_params})"
-  end
-end
-
-# Execute the serialized method on a remote host
-def execute_remotely(method_name, context, host, *args)
-  # Serialize the method and its dependencies
-  serialized_data = serialize_method(method_name, context)
-  data = JSON.parse(serialized_data)
-
-  # Collect serialized dependencies (instance/global variables)
-  deps = ""
-  data["dependencies"].each do |key, value|
-    deps << "#{key} = #{value.inspect}\n" if key.start_with?("@", "@@", "$")
-  end
-
-  # Collect all method definitions in the dependency chain
-  method_definitions = output_dependency_chain(method_name)
-
-  # Serialized arguments for the method call
-  serialized_args = args.map(&:inspect).join(", ")
-
-  # Generate the remote script
-  remote_script = <<~RUBY
-    require 'json'
-    require 'stringio'
-
-    # Capture both STDOUT and STDERR into a single stream
-    output_stream = StringIO.new
-    original_stdout = $stdout
-    original_stderr = $stderr
-    $stdout = output_stream
-    $stderr = output_stream
-
-    begin
-    # Serialized dependencies
-    #{deps}
-
-    # Serialized method definitions
-    #{method_definitions}
-
-    # Execute the method with arguments
-    result = #{method_name}(#{serialized_args})
-    # Capture updated state of dependent variables
-    updated_variables = {
-      #{data["dependencies"].keys.map { |key| "\"#{key}\": #{key}" }.join(", ")}
-    }
-    ensure
-    # Restore STDOUT and STDERR
-    $stdout = original_stdout
-    $stderr = original_stderr
-    end
-    # Combine the captured output with the result and variables
-    output = {
-      variables: updated_variables,
-      output: output_stream.string.strip, # Captured "natural" output
-      result: result
-    }
-    puts output.to_json
-  RUBY
-
-#  puts("Remote Script:\n#{remote_script}")
-
-  # Execute the script on the remote host
-  output = ""
-  Net::SSH.start(host) do |ssh|
-    output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
-  end
-#  puts output
-  JSON.parse(output.strip)
-end
-
-end
-
+  # ✅ Делегация
   def self.run(context, method, host, *args)
     Hub.instance.run(context, method, host, *args)
   end
@@ -299,6 +216,5 @@ end
   def self.land(context, target = nil, method_name, host)
     Hub.instance.land(context, target, method_name, host)
   end
-
 end
 
