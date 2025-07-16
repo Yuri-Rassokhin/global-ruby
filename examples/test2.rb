@@ -14,5 +14,5 @@ end
 require_relative '../sources/global-ruby'
 
 hosts = [ '130.162.50.40', '127.0.0.1' ]
-puts hosts.sum { |host| Global.run!(binding, :collect_info, host) }
+puts hosts.sum { |host| Global.run(binding, host, :collect_info) }
 
