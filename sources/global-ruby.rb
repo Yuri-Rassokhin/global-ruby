@@ -79,57 +79,6 @@ end
 
 private
 
-def scan(subnet = "10.0.0", port = 22, arg_threads = 50, username = "ubuntu")
-  ping_timeout = 1
-  ssh_timeout = 3
-  ssh_key = "~/.ssh/id_rsa"  # Change to your SSH private key
-
-  # Array to store discovered SSH hosts
-  ssh_hosts = []
-  mutex = Mutex.new
-
-  # Define worker queue
-  queue = Queue.new
-  (1..254).each { |i| queue.push("#{subnet}.#{i}") }
-
-  threads = arg_threads.times.map do
-    Thread.new do
-      while !queue.empty?
-        ip = queue.pop(true) rescue nil
-        next unless ip
-
-        # Ping check
-        if Net::Ping::External.new(ip, nil, ping_timeout).ping?
-          # SSH Check using socket
-          begin
-            Timeout.timeout(ssh_timeout) do
-              socket = TCPSocket.new(ip, port)
-              socket.close
-
-              # Attempt SSH login
-              begin
-                Net::SSH.start(ip, username, keys: [File.expand_path(ssh_key)], non_interactive: true) do |_ssh|
-                  mutex.synchronize { ssh_hosts << "#{username}@#{ip}" }
-                end
-              rescue
-                next # Ignore failed logins silently
-              end
-            end
-          rescue Timeout::Error, Errno::ECONNREFUSED
-            next # Ignore non-responsive SSH hosts
-          end
-        end
-      end
-    end
-  end
-
-  # Wait for all threads to finish
-  threads.each(&:join)
-
-  # Return the discovered SSH hosts
-  ssh_hosts
-end
-
 def method_dependencies(method)
   # Get the source code of the method
   source = method.source
