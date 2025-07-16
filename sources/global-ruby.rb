@@ -1,4 +1,3 @@
-module Global
 
 require 'json'
 require 'net/ssh'
@@ -8,7 +7,8 @@ require 'ripper'
 require 'set'
 require 'singleton'
 
-class Ruby
+module Global
+class Hub
   include Singleton
 
   def initialize
@@ -291,6 +291,14 @@ def execute_remotely(method_name, context, host, *args)
 end
 
 end
+
+  def self.run(context, method, host, *args)
+    Hub.instance.run(context, method, host, *args)
+  end
+
+  def self.land(context, target = nil, method_name, host)
+    Hub.instance.land(context, target, method_name, host)
+  end
 
 end
 
