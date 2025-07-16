@@ -11,24 +11,6 @@ require 'singleton'
 class Ruby
   include Singleton
 
-  @@debug = false
-
-  def self.debug
-    @@debug == true
-  end
-
-  def self.debug=(value)
-    @@debug = value
-  end
-
-  def debug
-    @@debug
-  end
-
-  def debug=(value)
-    @@debug = value
-  end
-
   def initialize
 
     @@user = `whoami`.chomp
@@ -356,19 +338,15 @@ def execute_remotely(method_name, context, *args)
     puts output.to_json
   RUBY
 
-  dbg("Remote Script:\n#{remote_script}")
+#  puts("Remote Script:\n#{remote_script}")
 
   # Execute the script on the remote host
   output = ""
   Net::SSH.start(@@host, @@user) do |ssh|
     output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
   end
-  dbg output
+#  puts output
   JSON.parse(output.strip)
-end
-
-def dbg(text)
-  puts text if @@debug
 end
 
 end
