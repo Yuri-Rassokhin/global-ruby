@@ -1,17 +1,18 @@
 #!/usr/bin/ruby
 
-def hw_info
-  puts "scanning #{`hostname`.strip}..."
+def header
+  puts "Scanning #{`hostname`.strip} with data = #{@data}..."
+end
+
+def collect_info
+  header
   `cat /proc/cpuinfo  | grep processor | wc -l`.to_i
 end
 
-
+@data = 3
 
 require_relative '../sources/global-ruby'
 
 hosts = [ '130.162.50.40', '127.0.0.1' ]
-cores = 0
+puts hosts.sum { |host| Global.run!(binding, :collect_info, host) }
 
-hosts.each { |h| Global.land(binding, :hw_info, h) and cores += hw_info }
-
-puts "Total cores on all hosts: #{cores}"

@@ -56,6 +56,11 @@ module Global
       end
     end
 
+  def run!(context, method_name, host, *args, target: nil)
+    land(context, target, method_name, host)
+    context.eval("#{method_name}(#{args.map(&:inspect).join(', ')})")
+  end
+
     private
 
     def method_dependencies(method)
@@ -216,5 +221,10 @@ module Global
   def self.land(context, target = nil, method_name, host)
     Hub.instance.land(context, target, method_name, host)
   end
+
+  def self.run!(context, method_name, host, *args, target: nil)
+    Hub.instance.run!(context, method_name, host, *args, target: target)
+  end
+
 end
 
