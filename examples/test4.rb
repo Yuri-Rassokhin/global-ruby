@@ -1,5 +1,5 @@
 
-require './sources/global-ruby'
+require './lib/global-ruby'
 
 def header
   puts "Scanning #{`hostname`.strip} with data = #{@data}..."
@@ -14,3 +14,4 @@ end
 
 hosts = [ '127.0.0.1' ]
 puts hosts.sum { |host| Global.run(binding, host, :collect_info) }
+
