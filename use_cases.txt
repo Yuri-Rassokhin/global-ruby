@@ -1,0 +1,15 @@
+1. Move code close to large data.
+2. Move code close to regulated data.
+3. Automatically spread application to multiple hosts to parallelize.
+4. For a given code, send it to a resource where it's efficient (by RAM, by number of cores, etc).
+5. Execute bulk opertions - running instances of the same method on multiple hosts to request HW info.
+6. Automatically split large data to chunks and send it to multiple hosts.
+7. In general, it has to
+	- Distinguish data processors that allow to process data in parallel chunks
+	- Such data to be split in chunks automatically. Indeed, composition of results in a final result can be automatically performed based on the resulting type:
+		If it's array, then the method landed onto multiple hosts, can automatically split the data in proportional chunks, and then add composing code to merge results.
+	- Stem application should understand its execution graph to know which methods could run in parallel, and which ones must wait each other
+8. Should be good for processing of distributed data sources (such as global databases, scattered file systems, and so forth).
+
+TODO: Even though there's no need to transfer complex class structures, it's important to check that dependency variables and methods can explicitly belong to user classes.
+
