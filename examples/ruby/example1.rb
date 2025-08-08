@@ -12,6 +12,8 @@ end
 
 @data = 3
 
-hosts = [ '127.0.0.1' ]
+hosts = [ '127.0.0.1', '130.162.50.40' ]
 puts hosts.sum { |host| Global.run(binding, host, :collect_info) }
+
+hosts.each { |host| puts Global.run(binding, host, File.method(:exist?), "/tmp") }
 
