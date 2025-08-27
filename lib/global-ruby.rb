@@ -25,6 +25,7 @@ module Global
     end
 
     def land(context, target = nil, method_name, host)
+      # puts "on the host #{host}" # DEBUG
       callable = method_name
 
       # Determine where the method should live
@@ -289,12 +290,12 @@ original_method =
       RUBY
 
       output = ""
-#      File.write("/tmp/code_dump.txt", remote_script) # DEBUG
+      # File.write("/tmp/code_dump.txt", remote_script) # DEBUG
       Net::SSH.start(host) do |ssh|
         output = ssh.exec!("ruby -e #{Shellwords.escape(remote_script)}")
       end
       begin
-#        File.write("/tmp/result_dump.txt", output) # DEBUG
+        # File.write("/tmp/result_dump.txt", output) # DEBUG
         JSON.parse(output.strip)
       rescue => e
         puts "global execution error: #{e.message}"
