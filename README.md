@@ -8,9 +8,12 @@ The paradigm envisions Ruby program as a flexible, global, continously running e
 * **VERSIONING.** Global history of the status of program objects (variables, method, etc).
 * **DATAFLOW-BASED PROCESSING.** Activation of Ruby methods implicitly triggered by data conditions rather than explicit calling.
 
-Global Ruby is on a mission to rethink the approach for software development and remove old-fashined restrictions: what machine to run application on?.. when to stop and start the application?.. how to orchestrate part of the application across remote machine?..
+Global Ruby is on a mission to rethink the approach for software development and remove old-fashined restrictions:
+* What machine to run the application on?..
+* When to stop and start the application?..
+* How to orchestrate remote parts of the application?..
 
-With Global Ruby, you adopt the paradigm of **global programmin**, as the next evolutionary step after distributed programming. Your program will not just run in any individual location - rather, it will endlessly live in the entire world.
+With Global Ruby, you adopt the paradigm of **global computing**, as the next evolutionary step after distributed computing. Your program will not just run in any individual location - rather, it will endlessly live in the entire world.
 
 # Use Cases
 
