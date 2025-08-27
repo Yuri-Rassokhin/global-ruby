@@ -1,12 +1,16 @@
-
 # About Global Ruby
 
-This project aims for implementation of GELP paradigm of software design ("Globally Extensible Local Programming").
-The paradigm envisions Ruby program as a flexible entity capable of
-1. EXTENSIBILITY. the program sends its methods for execution to any machine in the world, as if the method executed locally.
-2. HOTSWAP. Dynamic patching of a Ruby application at runtime.
-3. VERSIONING. Global history of the status of program objects (variables, method, etc).
-3. DATAFLOW-BASED PROCESSING. Activation of Ruby methods implicitly triggered by data conditions rather than explicit calling.
+This project aims for implementation of GELP paradigm of software design: "Globally Extensible Local Programming".
+
+The paradigm envisions Ruby program as a flexible, global, continously running entity capable of
+**EXTENSIBILITY.** The program sends its methods for execution to any machine in the world, as if the method executed locally.
+**HOTSWAP.** Dynamic patching of a Ruby application at runtime.
+**VERSIONING.** Global history of the status of program objects (variables, method, etc).
+**DATAFLOW-BASED PROCESSING.** Activation of Ruby methods implicitly triggered by data conditions rather than explicit calling.
+
+Global Ruby is on a mission to rethink the approach for software development and remove old-fashined restrictions: what machine to run application on?.. when to stop and start the application?.. how to orchestrate part of the application across remote machine?..
+
+With Global Ruby, you adopt the paradigm of **global programmin**, as the next evolutionary step after distributed programming. Your program will not just run in any individual location - rather, it will endlessly live in the entire world.
 
 # Use Cases
 
