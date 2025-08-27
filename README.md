@@ -21,7 +21,7 @@ Global Ruby rethinks traditional boundaries in software development and removes 
 
 * *How should remote parts of the system be orchestrated?*
 
-With Global Ruby, you embrace the paradigm of **global computing** — an evolutionary step beyond distributed computing. Your program doesn’t just run somewhere — it lives everywhere, persistently.
+With Global Ruby, you embrace the paradigm of **global computing** — an evolutionary step beyond distributed computing. Your program doesn’t just run somewhere — it lives everywhere, persistently. The whole world is limit.
 
 # Use Cases
 
@@ -43,3 +43,12 @@ The “extensibility” paradigm is defined by two principles:
 
 2. Stateless extension: When a method is sent and executed on a remote URL, it leaves no trace — it disappears entirely from the remote host until the next time it is invoked.
 
+# Quick Start
+
+Take a look at the conventional [application](./examples/ruby/example1.rb) that counts CPU cores using its method `collect_info`. With Global Ruby, however, you can send the method to any remote host:
+
+```ruby
+Global.run(binding, host, :collect_info)
+```
+
+`Global.run` extends the `collect_info` to the host `host`, executes it (with respect to its execution dependencies such as `header`, `@prefix`, etc.), and returns result back to the program, as if it were local execution.
